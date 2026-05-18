@@ -142,7 +142,7 @@ export default function App() {
             placeholder="システムプロンプト（空白の場合は送信しない）"
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
-            rows={3}
+            rows={60}
           />
         </div>
       )}
