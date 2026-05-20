@@ -15,6 +15,45 @@ import {
 } from './storage'
 import type { Preset } from './storage'
 
+type TextAttachment = { kind: 'text'; id: string; name: string; ext: string; content: string }
+type ImageAttachment = { kind: 'image'; id: string; name: string; mime: string; base64: string }
+type Attachment = TextAttachment | ImageAttachment
+
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+
+function isImageFile(file: File): boolean {
+  if (file.type.startsWith('image/')) return true
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return IMAGE_EXTS.includes(ext)
+}
+
+function extOf(name: string): string {
+  const m = name.match(/\.([^.]+)$/)
+  return m ? m[1].toLowerCase() : 'text'
+}
+
+function readAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result ?? ''))
+    r.onerror = () => reject(new Error(`${file.name} の読み込みに失敗`))
+    r.readAsText(file, 'utf-8')
+  })
+}
+
+function readAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => {
+      const s = String(r.result ?? '')
+      const i = s.indexOf(',')
+      resolve(i >= 0 ? s.slice(i + 1) : s)
+    }
+    r.onerror = () => reject(new Error(`${file.name} の読み込みに失敗`))
+    r.readAsDataURL(file)
+  })
+}
+
 export default function App() {
   const [models, setModels] = useState<string[]>([])
   const [model, setModel] = useState<string>(loadModel)
@@ -26,9 +65,11 @@ export default function App() {
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [attachments, setAttachments] = useState<Attachment[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     listModels()
@@ -58,11 +99,24 @@ export default function App() {
 
   const send = useCallback(async () => {
     const text = input.trim()
-    if (!text || isStreaming) return
+    if ((!text && attachments.length === 0) || isStreaming) return
     setInput('')
     setError(null)
 
-    const userMsg: ChatMessage = { role: 'user', content: text }
+    const textParts = attachments
+      .filter((a): a is TextAttachment => a.kind === 'text')
+      .map(a => '```' + a.ext + '\n' + a.content + '\n```')
+    const composedContent = [...textParts, text].filter(Boolean).join('\n\n')
+    const imageList = attachments
+      .filter((a): a is ImageAttachment => a.kind === 'image')
+      .map(a => a.base64)
+    setAttachments([])
+
+    const userMsg: ChatMessage = {
+      role: 'user',
+      content: composedContent,
+      ...(imageList.length > 0 ? { images: imageList } : {}),
+    }
     const history: ChatMessage[] = [...messages, userMsg]
     setMessages(history)
 
@@ -102,7 +156,38 @@ export default function App() {
       abortRef.current = null
       inputRef.current?.focus()
     }
-  }, [input, isStreaming, messages, model, systemPrompt])
+  }, [input, isStreaming, messages, model, systemPrompt, attachments])
+
+  const openFilePicker = () => {
+    if (isStreaming) return
+    fileInputRef.current?.click()
+  }
+
+  const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files
+    if (!list || list.length === 0) return
+    const files = Array.from(list)
+    e.target.value = ''
+    const added: Attachment[] = []
+    for (const f of files) {
+      try {
+        if (isImageFile(f)) {
+          const base64 = await readAsBase64(f)
+          added.push({ kind: 'image', id: crypto.randomUUID(), name: f.name, mime: f.type || 'image/png', base64 })
+        } else {
+          const content = await readAsText(f)
+          added.push({ kind: 'text', id: crypto.randomUUID(), name: f.name, ext: extOf(f.name), content })
+        }
+      } catch (err) {
+        setError((err as Error).message)
+      }
+    }
+    setAttachments(prev => [...prev, ...added])
+  }
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id))
+  }
 
   const onChangeSystemPrompt = (v: string) => {
     setSystemPrompt(v)
@@ -230,31 +315,69 @@ export default function App() {
         {messages.map((msg, i) => (
           <div key={i} className={`bubble bubble-${msg.role}`}>
             <span className="bubble-label">{msg.role === 'user' ? 'あなた' : 'AI'}</span>
-            <pre className="bubble-content">{msg.content}</pre>
+            {msg.images && msg.images.length > 0 && (
+              <div className="bubble-images">
+                {msg.images.map((b64, j) => (
+                  <img key={j} className="bubble-thumb" src={`data:image/*;base64,${b64}`} alt="" />
+                ))}
+              </div>
+            )}
+            {msg.content && <pre className="bubble-content">{msg.content}</pre>}
           </div>
         ))}
         <div ref={bottomRef} />
       </main>
 
       <footer className="input-bar">
-        <textarea
-          ref={inputRef}
-          className="chat-input"
-          placeholder="メッセージを入力… (Enter で送信 / Shift+Enter で改行)"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={3}
-          disabled={isStreaming}
-        />
-        <div className="input-actions">
-          {isStreaming ? (
-            <button className="btn-stop" onClick={stop}>停止</button>
-          ) : (
-            <button className="btn-send" onClick={send} disabled={!input.trim()}>
-              送信
-            </button>
-          )}
+        {attachments.length > 0 && (
+          <div className="attachment-chips">
+            {attachments.map((a) => (
+              <div key={a.id} className={`chip chip-${a.kind}`}>
+                {a.kind === 'image' ? (
+                  <img className="chip-thumb" src={`data:${a.mime};base64,${a.base64}`} alt={a.name} />
+                ) : (
+                  <span className="chip-icon">📄</span>
+                )}
+                <span className="chip-name" title={a.name}>{a.name}</span>
+                <button
+                  className="chip-remove"
+                  onClick={() => removeAttachment(a.id)}
+                  disabled={isStreaming}
+                  aria-label={`${a.name} を削除`}
+                >×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="input-row">
+          <button
+            className="btn-attach"
+            onClick={openFilePicker}
+            disabled={isStreaming}
+            aria-label="ファイルを添付"
+          >📎</button>
+          <input ref={fileInputRef} type="file" multiple hidden onChange={onPickFiles} />
+          <textarea
+            ref={inputRef}
+            className="chat-input"
+            placeholder="メッセージを入力… (Enter で送信 / Shift+Enter で改行)"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            rows={3}
+            disabled={isStreaming}
+          />
+          <div className="input-actions">
+            {isStreaming ? (
+              <button className="btn-stop" onClick={stop}>停止</button>
+            ) : (
+              <button
+                className="btn-send"
+                onClick={send}
+                disabled={!input.trim() && attachments.length === 0}
+              >送信</button>
+            )}
+          </div>
         </div>
       </footer>
     </div>

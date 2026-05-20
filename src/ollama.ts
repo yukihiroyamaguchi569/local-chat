@@ -1,6 +1,7 @@
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
+  images?: string[]
 }
 
 export async function listModels(): Promise<string[]> {

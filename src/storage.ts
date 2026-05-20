@@ -13,7 +13,11 @@ export function loadMessages(): ChatMessage[] {
 }
 
 export function saveMessages(msgs: ChatMessage[]): void {
-  localStorage.setItem(KEY_MESSAGES, JSON.stringify(msgs))
+  try {
+    localStorage.setItem(KEY_MESSAGES, JSON.stringify(msgs))
+  } catch (e) {
+    console.warn('Failed to save messages to localStorage:', e)
+  }
 }
 
 export function loadSystemPrompt(): string {
