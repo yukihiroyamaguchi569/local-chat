@@ -1,10 +1,18 @@
 {
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:github.com)"
+    ]
+  },
   "sandbox": {
     "enabled": true,
     "autoAllowBashIfSandboxed": true,
     "allowUnsandboxedCommands": false,
     "filesystem": {
-      "allowWrite": ["/Users/yukihiro/claude-code/qwen/.git"]
+      "allowWrite": [
+        "/Users/yukihiro/claude-code/qwen/.git"
+      ]
     }
   }
 }
