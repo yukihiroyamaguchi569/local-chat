@@ -109,7 +109,7 @@ export default function App() {
     <div className="layout">
       <header className="header">
         <div className="header-left">
-          <span className="app-title">Qwen Chat</span>
+          <span className="app-title">Local Chat</span>
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
@@ -155,7 +155,7 @@ export default function App() {
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`bubble bubble-${msg.role}`}>
-            <span className="bubble-label">{msg.role === 'user' ? 'あなた' : 'Qwen'}</span>
+            <span className="bubble-label">{msg.role === 'user' ? 'あなた' : 'AI'}</span>
             <pre className="bubble-content">{msg.content}</pre>
           </div>
         ))}
