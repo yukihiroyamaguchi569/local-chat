@@ -107,6 +107,7 @@ export async function streamChat(opts: {
   messages: ChatMessage[]
   signal: AbortSignal
   onDelta: (delta: string) => void
+  onActivity?: () => void
 }): Promise<void> {
   const { model, messages, signal } = opts
   const onDelta = makeThinkFilter(opts.onDelta)
@@ -145,6 +146,7 @@ export async function streamChat(opts: {
           done: boolean
         }
         if (chunk.message?.content) {
+          opts.onActivity?.()
           raw += chunk.message.content
           const v = visibleStable(raw)
           if (v.length > emitted) { onDelta(v.slice(emitted)); emitted = v.length }

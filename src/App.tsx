@@ -66,6 +66,8 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>(loadMessages)
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [lastActivityAt, setLastActivityAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const abortRef = useRef<AbortController | null>(null)
@@ -85,6 +87,12 @@ export default function App() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  useEffect(() => {
+    if (!isStreaming) return
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [isStreaming])
 
   useEffect(() => { saveMessages(messages) }, [messages])
   useEffect(() => { saveSystemPrompt(systemPrompt) }, [systemPrompt])
@@ -131,6 +139,7 @@ export default function App() {
 
     const ctrl = new AbortController()
     abortRef.current = ctrl
+    setLastActivityAt(Date.now())
     setIsStreaming(true)
 
     try {
@@ -138,6 +147,7 @@ export default function App() {
         model,
         messages: payload,
         signal: ctrl.signal,
+        onActivity: () => setLastActivityAt(Date.now()),
         onDelta: (delta) => {
           setMessages((prev) => {
             const next = [...prev]
@@ -155,6 +165,7 @@ export default function App() {
       }
     } finally {
       setIsStreaming(false)
+      setLastActivityAt(null)
       abortRef.current = null
       inputRef.current?.focus()
     }
@@ -324,13 +335,32 @@ export default function App() {
                 ))}
               </div>
             )}
-            {msg.content && (
-              msg.role === 'assistant'
-                ? <div className="bubble-content bubble-markdown">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                  </div>
-                : <pre className="bubble-content">{msg.content}</pre>
-            )}
+            {isStreaming && i === messages.length - 1 && msg.role === 'assistant' && !msg.content
+              ? (() => {
+                  const silence = lastActivityAt ? now - lastActivityAt : 0
+                  if (silence >= 8000) {
+                    return (
+                      <div className="thinking-indicator thinking-stalled">
+                        応答待ち… {Math.round(silence / 1000)}秒経過
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="thinking-indicator">
+                      <span className="thinking-dot" />
+                      <span className="thinking-dot" />
+                      <span className="thinking-dot" />
+                    </div>
+                  )
+                })()
+              : msg.content && (
+                  msg.role === 'assistant'
+                    ? <div className="bubble-content bubble-markdown">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      </div>
+                    : <pre className="bubble-content">{msg.content}</pre>
+                )
+            }
           </div>
         ))}
         <div ref={bottomRef} />
