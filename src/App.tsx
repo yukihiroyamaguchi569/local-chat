@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from './ollama'
 import { listModels, streamChat } from './ollama'
 import {
@@ -322,7 +324,13 @@ export default function App() {
                 ))}
               </div>
             )}
-            {msg.content && <pre className="bubble-content">{msg.content}</pre>}
+            {msg.content && (
+              msg.role === 'assistant'
+                ? <div className="bubble-content bubble-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                  </div>
+                : <pre className="bubble-content">{msg.content}</pre>
+            )}
           </div>
         ))}
         <div ref={bottomRef} />
