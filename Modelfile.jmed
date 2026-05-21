@@ -1,0 +1,27 @@
+FROM /Users/yukihiro/local-llms/SIP-jmed-llm-2-8x13b-OP-instruct-IQ2_XS.gguf
+
+TEMPLATE """{{ if .System }}{{ .System }}
+{{ end }}
+{{- range .Messages }}
+{{- if eq .Role "user" }}
+
+### 指示:
+{{ .Content }}
+{{- else if eq .Role "assistant" }}
+
+### 応答:
+{{ .Content }}</s>
+{{- end }}
+{{- end }}
+
+### 応答:
+"""
+
+SYSTEM """以下は、タスクを説明する指示です。要求を適切に満たす応答を書きなさい。あなたは日本の医療・健康に関する質問に、正確で信頼性の高い情報を日本語で提供します。医学的判断が必要な場合は医師への相談を促してください。"""
+
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
+PARAMETER repeat_penalty 1.1
+PARAMETER num_ctx 4096
+PARAMETER stop "### 指示:"
+PARAMETER stop "</s>"
